@@ -6,24 +6,42 @@ Chaos Game inspired by music
 "v3": triggering from sound
 """
 import sys
+from datetime import datetime
 import numpy as np
+import scipy.stats as stats
 import matplotlib.pyplot as plt
 import sound_analyzer as SA
-import fractalloop as floop
+try:
+    import fractal_loop as floop
+    USE_FORTRAN = True
+except ImportError:
+    # OK, try building it
+    import subprocess
+    stat = subprocess.call("python -m numpy.f2py -c FractalLoop.f90 -m fractal_loop".split()) 
+    if stat:
+        USE_FORTRAN = False
+    else:
+        import fractal_loop as floop
+        USE_FORTRAN = True
 #import matplotlib
 #matplotlib.use('agg')
 
 
-def main(verbose=True):
+def main(args):
+    """
+    Get base parameters of the image generation,
+    and optionally listen to sound to seed some other parameters
+    """
+    if args:
+        # Do NOT analyze sound - e.g. for testing
+        ideal = True
+    else:
+        ideal = False
 
+    # Get parameters for image
     n_basisPoints = 5
-    fundamental = 55
-    harmonics = 'const'
-    ideal = True
-
-    # Get parameters for music and image
-    name,basisNotes,basisBeatInterval,basisPoints,rawWeight,moveFrac = \
-        GetParameters(n_basisPoints, fundamental, harmonics, verbose)
+    verbose = True
+    name,basisPoints,rawWeight,moveFrac = GetParameters(n_basisPoints, verbose)
     
     if ideal:
         randoms = None
@@ -31,18 +49,20 @@ def main(verbose=True):
         # record sound and find peak frequency near some target
         target = 440
         window = 10
-        peak, data = SA.get_peak(near=target, within=window, duration_seconds=10)
-        min_dat = min(data)
-        max_dat = max(data)
-        randoms = (data - min_dat)/(max_dat - min_dat)
+        peak, data = SA.get_peak(target,window, duration_seconds=5, rate=6000)
+        # Transform with Normal Cumulative Distribution Function
+        # Data sort of looks normal; 
+        # the distribution of CDF values should look uniform
+        randoms = stats.norm.cdf(data, scale=np.std(data))
         if verbose:
             print("Randoms: Min={}, Max={}".format(min(randoms), max(randoms)))
-            plt.plot(data)
+            fig, ax = plt.subplots(1,2)
+            ax[0].plot(randoms)
+            ax[0].set_xlabel('Samples')
+            ax[1].hist(randoms,bins=25)
+            ax[1].set_xlabel('Random sample histogram')
             plt.show()
-            plt.hist(data,bins=25)
-            plt.show()
-            #TODO: inverse CDF of normal transform
-
+        """
         # Positive or negative fraction measuring how far off "ideal" we are;
         # perturb moveFrac based on sound analysis
         # Idea is to change it more for certain basis points
@@ -54,55 +74,29 @@ def main(verbose=True):
         if verbose:
             print("Peak frequency: {}".format(peak))
             print("Perturbation: {}".format(delta_fraction))
+        """
 
     # Generate image file
-    GenerateImage(name, basisPoints, rawWeight, moveFrac, randoms=randoms, verbose=verbose)
+    GenerateImage(name, basisPoints, rawWeight, moveFrac, randoms=randoms, 
+            use_fortran=USE_FORTRAN, verbose=verbose)
     return
 
 
-def GetParameters(n_basisPoints=5, fundamental=55, harmonics='const', verbose=True):
+def GetParameters(n_basisPoints=5, verbose=True):
     """ 
-    get parameters for chaos game
+    Get parameters for chaos game
     """
-    # Options
-    # how many basis points
-    # fundamental (e.g. 55=G3, 60=C4)
-    # harmonics (const, Maj7, Dom7, mMaj7, Min7)
     assert n_basisPoints <= 5 and n_basisPoints > 0, "Number of basis points needs to be in (0,5]"
 
-    name ='fractal_{}-{}-{}'.format(n_basisPoints,fundamental,harmonics)
+    timestring = '{}'.format(datetime.now()).split('.')[0].replace(' ','_')
+    name ='fractal_{}'.format(timestring)
 
-    # Harmonics between the basis notes
-    constant   = np.array([0,0,0,0,0])
-    majSeventh = np.array([0,4,7,11,0])
-    domSeventh = np.array([0,4,7,10,0])
-    mMajSeventh= np.array([0,3,7,11,0])
-    minSeventh = np.array([0,3,7,10,0])
-    if harmonics == 'const':
-        diffNotes = fundamental + constant
-    elif harmonics == 'Maj7':
-        diffNotes = fundamental + majSeventh
-    elif harmonics == 'Dom7':
-        diffNotes = fundamental + domSeventh
-    elif harmonics == 'mMaj7':
-        diffNotes = fundamental + mMajSeventh
-    elif harmonics == 'Min7':
-        diffNotes = fundamental + minSeventh
-    # Set basis notes
-    basisNotes = diffNotes[0:n_basisPoints]
-
-    # TODO: modify
-    # Beats between notes/events:
-    # PRIME multiples of a sixteenth note
-    # (beat = quarter,
-    #  sixteenth = quarter of a beat)
+    # Set weighting for each basis point in chaos game
+    # TODO:
+    # These relative weights/frequencies could reflect the relative weight of some
+    # component of the music or sound that is analyzed
     beats = [2,3,5,7,11]
-    sixteenth = 0.25
-    basisBeatInterval = sixteenth*np.array(beats[0:n_basisPoints])
-
-    # Set weighting for each point in chaos game
-    # These weights/relative frequencies should reflect how often they occur in the music
-    rawWeight = np.array([1.0/b for b in basisBeatInterval])
+    rawWeight = np.array([1.0/b for b in beats[:n_basisPoints]])
 
     # Set basis points
     basisPoints = []
@@ -125,19 +119,25 @@ def GetParameters(n_basisPoints=5, fundamental=55, harmonics='const', verbose=Tr
         print("(raw) weights: {}".format(rawWeight))
         print("(ideal) Move fractions: {}".format(moveFrac))
 
-    return  name, basisNotes, basisBeatInterval, basisPoints, rawWeight, moveFrac 
+    return  name, basisPoints, rawWeight, moveFrac 
 
 
 def GenerateImage(name, basisPoints, rawWeight, moveFrac, 
-        n_Iterations=5e5, n_grid=1000, randoms=None, verbose=True):
+        n_Iterations=5e5, n_grid=1000, randoms=None, use_fortran=True, verbose=True):
     """
     Play the "Chaos Game" to generate an image (png) file
+
+    Args:
+    name : (string) Base name of image file to be produced
+    basisPoints : (array, shape (n,2)) The "basis points" of the game
+    rawWeight : (array, shape (n,)) The raw weights for choosing the basis points
+    moveFrac : (array, shape (n,)) The fraction to move to each basis point
+    n_Iterations : (int) How many points are generated (ignored of randoms is not None)
+    n_grid : (int) How many grid point to plot (roughly, the resolution)
+    randoms : (array) Optional pre-computed random numbers to use for chaos game iteration
+    use_fortran : (boolean) Use fractal_loop module with fast compiled code
+    verbose : (boolean) Display what's going on
     """
-    # basisPoints: n x 2 array, the "basis points" of the game
-    # rawWeight: length n array, the raw weights for choosing the basis points
-    # moveFrac: length n array, the fraction to move to each basis point
-    # n_Iterations controls how many points are generated
-    # n_grid controls the resolution of the plot
     # should probably check that basisPoints are in unit square
 
     # Calculate cumulative probability distribution based on raw weights
@@ -156,11 +156,11 @@ def GenerateImage(name, basisPoints, rawWeight, moveFrac,
     if randoms is None:
         randoms = np.random.random(int(n_Iterations))
 
-    if True:
-        basis_indices = map(lambda p: np.argmax(p < cumulProb), randoms)
-        b_indices = np.array(list(basis_indices))
-        # Call fortran to do loop real fast
-        density = floop.get_density(n_grid, b_indices, moveFrac, basisPoints)
+    if use_fortran:
+        basis_indices_map = map(lambda p: np.argmax(p < cumulProb), randoms)
+        basis_indices = np.fromiter(basis_indices_map, dtype=np.int)
+        # Call compiled Fortran to do loop real fast
+        density = floop.get_density(n_grid, basis_indices, moveFrac, basisPoints)
     else:
         # Initial point: can be any point in unit hypercube,
         # but first basis point works fine
@@ -207,5 +207,5 @@ def GenerateImage(name, basisPoints, rawWeight, moveFrac,
 
 if __name__ == "__main__":
     args = sys.argv[1:]
-    main()
+    main(args)
 

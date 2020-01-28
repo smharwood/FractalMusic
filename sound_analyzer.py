@@ -13,17 +13,25 @@ from scipy import signal
 import matplotlib.pyplot as plt
 
 
-def get_peak(near=440, within=10, duration_seconds=2, test=False):
-    """ Record audio and analyze to find peak frequency in some region """
+def get_peak(target=440, within=10, duration_seconds=2, rate=6000, test=False):
+    """ 
+    Record audio and analyze to find peak frequency in some region 
+
+    Args:
+    target : (float) The frequency in Hertz to look around
+    within : (float) The window size around target to search 
+    duration_seconds : (float) Duration of recording (in seconds)
+    rate : (int) Sample rate in Hertz (samples/second)
+    test : (Boolean) Whether to show some plots of whats going on
+
+    Returns:
+    peak : (float) Identified peak frequency in Hz in the specified window around target
+    data : (array) Raw recorded data to fiddle with if desired
+    """
 
     # Grab some audio as numpy array
-    # rate = sample rate (samples/sec)
-    #  (does not need to be very high- we are trying to resolve musical frequencies,
-    #   and the highest note on a piano is ~4000 Hz)
     # Pad desired duration by a couple seconds 
     # (b/c there are weird artifacts at beginning) 
-#    rate = 6000
-    rate = 32000
     pad_duration = duration_seconds + 0.6
     print("Recording sound...")
     data = sd.rec(int(pad_duration * rate), samplerate=rate, channels=1)
@@ -56,8 +64,8 @@ def get_peak(near=440, within=10, duration_seconds=2, test=False):
     # Note: resolution (how accurately we can determine/resolve frequencies)
     # is essentially the inverse of how long we record
     resolution = rate/len(data)
-    index_windowL = int((near-within)/resolution)
-    index_windowU = int((near+within)/resolution)
+    index_windowL = int((target-within)/resolution)
+    index_windowU = int((target+within)/resolution)
 #    print(resolution)
 #    print(len(myrecording))
 #    print(index_windowL)
