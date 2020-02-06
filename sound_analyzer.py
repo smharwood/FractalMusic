@@ -13,19 +13,16 @@ from scipy import signal
 import matplotlib.pyplot as plt
 
 
-def get_peak(target=440, within=10, duration_seconds=2, rate=6000, test=False):
+def get_audio(duration_seconds, rate, test=False):
     """ 
-    Record audio and analyze to find peak frequency in some region 
+    Record audio and return as array
 
     Args:
-    target : (float) The frequency in Hertz to look around
-    within : (float) The window size around target to search 
     duration_seconds : (float) Duration of recording (in seconds)
     rate : (int) Sample rate in Hertz (samples/second)
     test : (Boolean) Whether to show some plots of whats going on
 
     Returns:
-    peak : (float) Identified peak frequency in Hz in the specified window around target
     data : (array) Raw recorded data to fiddle with if desired
     """
 
@@ -52,6 +49,68 @@ def get_peak(target=440, within=10, duration_seconds=2, rate=6000, test=False):
         plt.pcolormesh(t, f, Sxx_mod)
         plt.show()
         print("Spectrogram resolution: {} Hz".format(max(f)/len(f)))
+    return data
+
+
+def get_relative_strengths(targets, duration_seconds=2, rate=6000, test=False):
+    """ 
+    Record audio and analyze to find relative strength of given frequencies
+
+    Args:
+    targets : (list of floats) The frequencies in Hertz to analyze
+    duration_seconds : (float) Duration of recording (in seconds)
+    rate : (int) Sample rate in Hertz (samples/second)
+    test : (Boolean) Whether to show some plots of whats going on
+
+    Returns:
+    strengths : (list of floats) Identified peak frequency in Hz in the specified window around target
+    data : (array) Raw recorded data to fiddle with if desired
+    """
+    # Grab some audio as numpy array
+    data = get_audio(duration_seconds, rate, test)
+
+    # Discrete Fourier Transform
+    # Take second half because 
+    # those are the negative frequencies which don't matter for real signal
+    fft_out = fft(data)
+    fft_mod = np.abs(fft_out[0:len(fft_out)//2])
+    
+    # Look at target frequencies and figure relative strengths
+    # Note: resolution (how accurately we can determine/resolve frequencies)
+    # is essentially the inverse of how long we record
+    resolution = rate/len(data)
+    target_indices = [int(t/resolution) for t in targets]
+    strengths = fft_mod[target_indices]
+    if test:
+        print("Strengths: {}".format(strengths))
+        x = resolution*np.arange(len(fft_mod))
+        plt.plot(x,fft_mod)
+        for t in targets:
+            plt.axvline(x=t,color='k')
+        plt.xlabel('Frequency, Hz')
+        plt.title('Spectrum')
+        plt.show()
+    return strengths, data
+
+
+def get_peak(target=440, within=10, duration_seconds=2, rate=6000, test=False):
+    """ 
+    Record audio and analyze to find peak frequency in some region 
+
+    Args:
+    target : (float) The frequency in Hertz to look around
+    within : (float) The window size around target to search 
+    duration_seconds : (float) Duration of recording (in seconds)
+    rate : (int) Sample rate in Hertz (samples/second)
+    test : (Boolean) Whether to show some plots of whats going on
+
+    Returns:
+    peak : (float) Identified peak frequency in Hz in the specified window around target
+    data : (array) Raw recorded data to fiddle with if desired
+    """
+
+    # Grab some audio as numpy array
+    data = get_audio(duration_seconds, rate, test)
 
     # Discrete Fourier Transform
     # Take second half because 
