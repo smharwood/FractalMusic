@@ -142,7 +142,8 @@ def GenerateImage(name, basisPoints, rawWeight, moveFrac,
     verbose : (boolean) Display what's going on
     """
     # should probably check that basisPoints are in unit square
-
+    
+    n_Iterations = int(n_Iterations)
     # Calculate cumulative probability distribution based on raw weights
     prob = rawWeight/np.sum(rawWeight)
     cumulProb = np.array([ np.sum(prob[0:i+1]) for i in range(len(prob)) ])
@@ -163,9 +164,12 @@ def GenerateImage(name, basisPoints, rawWeight, moveFrac,
     # However, if randoms is not None, they might not be independent and uniform
     # and this may impose different results
     if randoms is None:
-        randoms = np.random.random(int(n_Iterations))
-    basis_sequence_map = map(lambda p: np.argmax(p < cumulProb), randoms)
-    basis_sequence_full = np.fromiter(basis_sequence_map, dtype=np.int)
+        basis_sequence_full = np.random.choice(np.arange(len(prob)), p=prob, size=n_Iterations)
+    else:
+        basis_sequence_map = map(lambda p: np.argmax(p < cumulProb), randoms)
+        basis_sequence_full = np.fromiter(basis_sequence_map, dtype=np.int)
+    # "Filter" the sequence:
+    # this can create some cool structure
     if filter_seq:
         basis_sequence = [basis_sequence_full[i] for i in range(1,len(basis_sequence_full)) 
                         if basis_sequence_full[i] != basis_sequence_full[i-1] ]
