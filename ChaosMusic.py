@@ -44,30 +44,30 @@ def main(args):
     verbose = True
     # Get base parameters for image;
     # These might be overwritten
-    name,basisPoints,rawWeight,moveFrac = GetParameters(n_basisPoints, verbose)
+    name,basisPoints,rawWeight,moveFrac = GetParameters(n_basisPoints,ideal,verbose)
     
     if ideal:
         randoms = None
         filter_seq = False
     else:
         # Record sound and analyze somehow
-        # Look at peak:
-        #peak, data = SA.get_peaks(targets[0], window=10, duration_seconds=12, rate=44100)
-    
+
         # Look at strength/power of certain frequencies;
         # Make these the raw weights of the basis points in the chaos game
         # The notes appearing more strongly will be chosen more often in the iteration
-        strengths, data = SA.get_relative_strengths(targets, duration_seconds=12, rate=44100)
+        strengths, data = SA.get_relative_strengths(targets, duration_seconds=4, rate=12000)
         rawWeight = strengths
+        randoms = None
         filter_seq = False   
-
+        """
+        # Look at peak:
+        peak, data = SA.get_peaks(targets[0], window=10, duration_seconds=12, rate=44100)
         # Transform raw audio data with Normal Cumulative Distribution Function
         # Data sort of looks normal; 
         # the distribution of CDF values should look uniform
+        # Subsample to reduce covariance? but results in too few points
         trans_data = stats.norm.cdf(data, scale=np.std(data))
-        # subsample to reduce covariance, but results in too few points
-#        randoms = trans_data[::10]
-        randoms = None
+        randoms = trans_data[::10]
         if verbose and randoms is not None:
             print("Randoms: Min={}, Max={}".format(min(randoms), max(randoms)))
             fig, ax = plt.subplots(1,2)
@@ -76,14 +76,18 @@ def main(args):
             ax[1].hist(randoms,bins=25)
             ax[1].set_xlabel('Random sample histogram')
             plt.show()
+        """
 
-    # Generate image file
-    GenerateImage(name, basisPoints, rawWeight, moveFrac, randoms=randoms, 
+    # Generate fractal data
+    density = GenerateImage(basisPoints, rawWeight, moveFrac, randoms=randoms, 
             filter_seq=filter_seq, use_fortran=USE_FORTRAN, verbose=verbose)
+
+    # Plot
+    plotter(density,name)
     return
 
 
-def GetParameters(n_basisPoints=5, verbose=True):
+def GetParameters(n_basisPoints=5,ideal=True,verbose=True):
     """ 
     Get parameters for chaos game
     """
@@ -94,9 +98,18 @@ def GetParameters(n_basisPoints=5, verbose=True):
 
     # Set basis points
     basisPoints = []
-    for k in range(n_basisPoints):
+    if ideal:
+        n_uniform_points = n_basisPoints
+    else:
+        n_uniform_points = n_basisPoints - 1
+        # add a point randomly in unit circle
+        r = 0.5*np.random.random()
+        angle = 2*np.pi*np.random.random()
+        basisPoints.append([r*np.cos(angle), r*np.sin(angle)])
+    # Put points uniformly around unit circle
+    for k in range(n_uniform_points):
         # go around the circle of radius 0.5 in polar coordinates
-        angle = k*2*np.pi/n_basisPoints
+        angle = k*2*np.pi/n_uniform_points
         basisPoints.append([0.5*np.cos(angle), 0.5*np.sin(angle)])
     # shift the center to (0.5, 0.5)
     basisPoints = np.array([0.5, 0.5]) + basisPoints
@@ -123,14 +136,13 @@ def GetParameters(n_basisPoints=5, verbose=True):
     return  name, basisPoints, rawWeight, moveFrac 
 
 
-def GenerateImage(name, basisPoints, rawWeight, moveFrac, 
+def GenerateImage(basisPoints, rawWeight, moveFrac, 
         n_Iterations=5e5, n_grid=1000, randoms=None, filter_seq=True, 
         use_fortran=True, verbose=True):
     """
     Play the "Chaos Game" to generate an image (png) file
 
     Args:
-    name : (string) Base name of image file to be produced
     basisPoints : (array, shape (n,2)) The "basis points" of the game
     rawWeight : (array, shape (n,)) The raw weights for choosing the basis points
     moveFrac : (array, shape (n,)) The fraction to move to each basis point
@@ -205,6 +217,10 @@ def GenerateImage(name, basisPoints, rawWeight, moveFrac,
     if verbose:
         print("Done iterating")
 
+    return density
+
+
+def plotter_simple(density,name):
     # Plot with imshow (simple and consistent)
     DPI = 300
     fig_dim = (1000.0)/DPI
@@ -215,6 +231,64 @@ def GenerateImage(name, basisPoints, rawWeight, moveFrac,
     plt.yticks([])
     plt.axis('off')
     plt.savefig(name+'.png', bbox_inches='tight', pad_inches=fig_dim/6)
+    plt.close()
+    return
+
+
+def plotter(density,name):
+    # Plot in a more custom way
+
+    # assume square
+    n_grid = density.shape[0]
+
+    # sparse version of density matrix is useful
+    (rows,cols) = np.nonzero(density)
+    vals = density[(rows,cols)]
+
+    # Plotting parameters
+    # All this is to get a particular look with a scatterplot
+    # DPI and fig_dim don't matter much;
+    #   they are defined so we always get a 2000x2000 pixel image
+    # But there is an interaction between DPI and marker size
+    #   and the right marker size is required to avoid aliasing
+    # DPI : dots per inch
+    # fig_dim : figure dimension in inches
+    # markershape : Shape of marker in scatterplot. 's' = square
+    # markersize : Marker size in square points
+    # alphaval : Alpha channel value for markers
+    # min_frac : controls minimum value for colormap of scatterplot
+    #   min_frac = 0 : full colormap spectrum is used
+    #   min_frac = 1 : half of colormap spectrum is used
+    DPI = 100
+    fig_dim = 2000.0/DPI
+    markershape = 's'
+    markersize = (3.1*72.0/DPI)**2 # 3.1 pixels wide?
+    alphaval = 1.0
+    # idea here: if the scatterplot takes up a fair amount of the plot area,
+    # allow a finer color gradation
+    colormap = 'Greys'
+    min_frac = max(0, 0.70 - len(vals)/float(n_grid**2))
+
+    # Map density values thru log
+    # (log of density seems to produce more interesting image);
+    # set minimum value for setting colormap
+    logvals = np.log(vals)
+    minv    = -min_frac*max(logvals)
+
+    # order the points so that darker points (higher values) are plotted last and on top
+    ordering = np.argsort(logvals)
+    rows = rows[ordering]
+    cols = cols[ordering]
+    logvals = logvals[ordering]
+
+    fig = plt.figure(figsize=(fig_dim,fig_dim), dpi=DPI)
+    plt.scatter(cols,rows, c=logvals,s=markersize,marker=markershape,linewidths=0,\
+                    cmap=colormap,norm=None,vmin=minv,alpha=alphaval)
+    plt.axis([0,n_grid,0,n_grid], 'equal')
+    plt.xticks([])
+    plt.yticks([])
+    plt.axis('off')
+    plt.savefig(name, bbox_inches='tight', pad_inches=fig_dim/6)
     plt.close()
     return
 
