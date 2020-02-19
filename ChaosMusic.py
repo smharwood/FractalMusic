@@ -15,16 +15,15 @@ try:
     import fractal_loop as floop
     USE_FORTRAN = True
 except ImportError:
-    # OK, try building it
-    import subprocess
-    stat = subprocess.call("python -m numpy.f2py -c FractalLoop.f90 -m fractal_loop".split()) 
-    if stat:
-        USE_FORTRAN = False
-    else:
-        import fractal_loop as floop
-        USE_FORTRAN = True
-#import matplotlib
-#matplotlib.use('agg')
+    USE_FORTRAN = False
+#    # OK, try building it
+#    import subprocess
+#    stat = subprocess.call("python -m numpy.f2py -c FractalLoop.f90 -m fractal_loop".split()) 
+#    if stat:
+#        USE_FORTRAN = False
+#    else:
+#        import fractal_loop as floop
+#        USE_FORTRAN = True
 
 
 def main(args):
@@ -32,19 +31,21 @@ def main(args):
     Get base parameters of the image generation,
     and optionally listen to sound to seed some other parameters
     """
+    # These are frequencies of the Bb overtone series from Bb1
+    targets = [58.270, 87.307, 116.54, 146.83, 174.61]
+    n_basis_pts = len(targets)
+    verbose = True
     if args:
         # Do NOT analyze sound - e.g. for testing
         ideal = True
+        n_ideal_pts = n_basis_pts
     else:
         ideal = False
+        n_ideal_pts = 3
 
-    # These are frequencies of the Bb overtone series from Bb1
-    targets = [58.270, 87.307, 116.54, 146.83, 174.61]
-    n_basisPoints = len(targets)
-    verbose = True
     # Get base parameters for image;
     # These might be overwritten
-    name,basisPoints,rawWeight,moveFrac = GetParameters(n_basisPoints,ideal,verbose)
+    name, basis_pts, raw_wts, move_fracs = GetParameters(n_basis_pts,n_ideal_pts,verbose)
     
     if ideal:
         randoms = None
@@ -55,8 +56,9 @@ def main(args):
         # Look at strength/power of certain frequencies;
         # Make these the raw weights of the basis points in the chaos game
         # The notes appearing more strongly will be chosen more often in the iteration
-        strengths, data = SA.get_relative_strengths(targets, duration_seconds=4, rate=12000)
-        rawWeight = strengths
+        strengths, data = SA.get_relative_strengths(targets, 
+            duration_seconds=4, rate=12000, test=False)
+        raw_wts = strengths
         randoms = None
         filter_seq = False   
         """
@@ -79,73 +81,72 @@ def main(args):
         """
 
     # Generate fractal data
-    density = GenerateImage(basisPoints, rawWeight, moveFrac, randoms=randoms, 
+    density = GenerateImage(basis_pts, raw_wts, move_fracs, randoms=randoms, 
             filter_seq=filter_seq, use_fortran=USE_FORTRAN, verbose=verbose)
 
     # Plot
     plotter(density,name)
+    plotter_simple_invert(density,name+'-invert')
     return
 
 
-def GetParameters(n_basisPoints=5,ideal=True,verbose=True):
+def GetParameters(n_basis_pts=5,n_ideal_pts=5,verbose=True):
     """ 
     Get parameters for chaos game
     """
-    assert n_basisPoints <= 5 and n_basisPoints > 0, "Number of basis points needs to be in (0,5]"
+    assert n_basis_pts <= 5 and n_basis_pts > 0, "Number of basis points needs to be in (0,5]"
+    assert n_ideal_pts <= n_basis_pts and n_ideal_pts > 0, "Number of ideal points not right"
 
     timestring = '{}'.format(datetime.now()).split('.')[0].replace(' ','_')
     name ='fractal_{}'.format(timestring)
 
     # Set basis points
-    basisPoints = []
-    if ideal:
-        n_uniform_points = n_basisPoints
-    else:
-        n_uniform_points = n_basisPoints - 1
-        # add a point randomly in unit circle
-        r = 0.5*np.random.random()
-        angle = 2*np.pi*np.random.random()
-        basisPoints.append([r*np.cos(angle), r*np.sin(angle)])
+    basis_pts = []
     # Put points uniformly around unit circle
-    for k in range(n_uniform_points):
-        # go around the circle of radius 0.5 in polar coordinates
-        angle = k*2*np.pi/n_uniform_points
-        basisPoints.append([0.5*np.cos(angle), 0.5*np.sin(angle)])
+    for k in range(n_ideal_pts):
+        angle = k*2*np.pi/n_ideal_pts
+        basis_pts.append([0.5*np.cos(angle), 0.5*np.sin(angle)])
+    # Put the rest randomly in unit circle
+    for k in range(n_basis_pts - n_ideal_pts):
+        #r = 0.5*np.random.random()
+        r = 0.5*(k+1)/float(n_basis_pts - n_ideal_pts)
+        angle = 2*np.pi*np.random.random()
+        basis_pts.append([r*np.cos(angle), r*np.sin(angle)])
     # shift the center to (0.5, 0.5)
-    basisPoints = np.array([0.5, 0.5]) + basisPoints
+    basis_pts = np.array([0.5, 0.5]) + basis_pts
 
     # Set weighting for each basis point in chaos game
-    # TODO:
     # These relative weights/frequencies could reflect the relative weight of some
     # component of the music or sound that is analyzed
+    # FOR NOW - they just get overwritten
     beats = [2,3,5,7,11]
-    rawWeight = np.array([1.0/b for b in beats[:n_basisPoints]])
+    raw_wts = np.array([1.0/b for b in beats[:n_basis_pts]])
 
     # Move fractions
     # TODO: What could move fraction be?
     # Maybe this provides some dynamics-
     # all the beats speed up in proportion somehow
     # kind of like how a higher move fraction bunches points up near a certain basis point
-    moveFrac = 0.5*np.ones(n_basisPoints)
+    move_fracs = 0.5*np.ones(n_basis_pts)
 
     if verbose:
-        print("Basis points:\n{}".format(basisPoints))
-        print("(ideal) raw weights: {}".format(rawWeight))
-        print("(ideal) move fractions: {}".format(moveFrac))
+        print("Basis points:\n{}".format(basis_pts))
+        print("(ideal) raw weights: {}".format(raw_wts))
+        print("(ideal) move fractions: {}".format(move_fracs))
 
-    return  name, basisPoints, rawWeight, moveFrac 
+    return  name, basis_pts, raw_wts, move_fracs 
 
 
-def GenerateImage(basisPoints, rawWeight, moveFrac, 
+def GenerateImage(basis_pts, raw_wts, move_fracs, 
         n_Iterations=5e5, n_grid=1000, randoms=None, filter_seq=True, 
         use_fortran=True, verbose=True):
     """
     Play the "Chaos Game" to generate an image (png) file
 
     Args:
-    basisPoints : (array, shape (n,2)) The "basis points" of the game
-    rawWeight : (array, shape (n,)) The raw weights for choosing the basis points
-    moveFrac : (array, shape (n,)) The fraction to move to each basis point
+    basis_pts : (array, shape (n,2)) The "basis points" of the game
+    raw_wts : (array, shape (n,)) The raw weights for choosing the basis points
+    move_fracs : (array, shape (n,)) The fraction to move to each basis point
     n_Iterations : (int) How many points are generated (ignored of randoms is not None)
     n_grid : (int) How many grid point to plot (roughly, the resolution)
     randoms : (array) Optional pre-computed random numbers to use for chaos game iteration
@@ -153,11 +154,11 @@ def GenerateImage(basisPoints, rawWeight, moveFrac,
     use_fortran : (boolean) Use fractal_loop module with fast compiled code
     verbose : (boolean) Display what's going on
     """
-    # should probably check that basisPoints are in unit square
+    # should probably check that basis_pts are in unit square
     
     n_Iterations = int(n_Iterations)
     # Calculate cumulative probability distribution based on raw weights
-    prob = rawWeight/np.sum(rawWeight)
+    prob = raw_wts/np.sum(raw_wts)
     cumulProb = np.array([ np.sum(prob[0:i+1]) for i in range(len(prob)) ])
 
     if verbose:
@@ -190,11 +191,11 @@ def GenerateImage(basisPoints, rawWeight, moveFrac,
 
     if use_fortran:
         # Call compiled Fortran to do loop real fast
-        density = floop.get_density(n_grid, basis_sequence, moveFrac, basisPoints)
+        density = floop.get_density(n_grid, basis_sequence, move_fracs, basis_pts)
     else:
         # Initial point: can be any point in unit hypercube,
         # but first basis point works fine
-        point = basisPoints[0]
+        point = basis_pts[0]
         # Generate more points in loop
         for i in basis_sequence:
             # Index i corresponds to a basis point chosen "at random"
@@ -202,7 +203,7 @@ def GenerateImage(basisPoints, rawWeight, moveFrac,
 
             # Calculate point:
             #   some fraction of distance between previous point and basis point i
-            point = (1-moveFrac[i])*point + moveFrac[i]*basisPoints[i]
+            point = (1-move_fracs[i])*point + move_fracs[i]*basis_pts[i]
         
             # Copy to density matrix;
             # increment number of points occurring in the grid point of interest
@@ -220,17 +221,18 @@ def GenerateImage(basisPoints, rawWeight, moveFrac,
     return density
 
 
-def plotter_simple(density,name):
+def plotter_simple_invert(density,name):
     # Plot with imshow (simple and consistent)
-    DPI = 300
-    fig_dim = (1000.0)/DPI
+    DPI = 100
+    fig_dim = (2000.0)/DPI
     log_density = np.log(density + 1e-6)
     plt.figure(figsize=(fig_dim,fig_dim),dpi=DPI)
-    plt.imshow(log_density, cmap='Greys',origin='lower',interpolation='none')
+    plt.imshow(log_density, cmap='Greys_r',origin='lower',interpolation='none')
     plt.xticks([])
     plt.yticks([])
     plt.axis('off')
-    plt.savefig(name+'.png', bbox_inches='tight', pad_inches=fig_dim/6)
+    plt.savefig(name+'.png', bbox_inches='tight', pad_inches=fig_dim/6, 
+        facecolor='black')
     plt.close()
     return
 

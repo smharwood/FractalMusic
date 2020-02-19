@@ -78,7 +78,7 @@ def get_relative_strengths(targets, duration_seconds=2, rate=6000, test=False):
     # Look at target frequencies and figure relative strengths
     # Note: resolution (how accurately we can determine/resolve frequencies)
     # is essentially the inverse of how long we record
-    resolution = rate/len(data)
+    resolution = float(rate)/len(data)
     target_indices = [int(t/resolution) for t in targets]
     strengths = fft_mod[target_indices]
     if test:
