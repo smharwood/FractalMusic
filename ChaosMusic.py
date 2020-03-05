@@ -85,7 +85,8 @@ def main(args):
             filter_seq=filter_seq, use_fortran=USE_FORTRAN, verbose=verbose)
 
     # Plot
-    plotter(density,name)
+    if verbose: print("Creating fractal image")
+    plotter(density,name,invert=False)
     plotter_simple_invert(density,name+'-invert')
     return
 
@@ -197,7 +198,7 @@ def GenerateImage(basis_pts, raw_wts, move_fracs,
         # but first basis point works fine
         point = basis_pts[0]
         # Generate more points in loop
-        for i in basis_sequence:
+        for count, i in enumerate(basis_sequence):
             # Index i corresponds to a basis point chosen "at random"
             # (although that depends on the statistics of the sequence <randoms>)
 
@@ -237,7 +238,7 @@ def plotter_simple_invert(density,name):
     return
 
 
-def plotter(density,name):
+def plotter(density,name,invert=False):
     # Plot in a more custom way
 
     # assume square
@@ -268,29 +269,35 @@ def plotter(density,name):
     alphaval = 1.0
     # idea here: if the scatterplot takes up a fair amount of the plot area,
     # allow a finer color gradation
-    colormap = 'Greys'
     min_frac = max(0, 0.70 - len(vals)/float(n_grid**2))
+    if invert:
+        facecolor = 'black'
+        colormap = 'Greys_r'
+    else:
+        facecolor = 'white'
+        colormap = 'Greys'
 
     # Map density values thru log
     # (log of density seems to produce more interesting image);
     # set minimum value for setting colormap
     logvals = np.log(vals)
-    minv    = -min_frac*max(logvals)
+    minv = -min_frac*max(logvals)
 
-    # order the points so that darker points (higher values) are plotted last and on top
+    # order the points so that higher values are plotted last and on top
     ordering = np.argsort(logvals)
     rows = rows[ordering]
     cols = cols[ordering]
     logvals = logvals[ordering]
 
     fig = plt.figure(figsize=(fig_dim,fig_dim), dpi=DPI)
-    plt.scatter(cols,rows, c=logvals,s=markersize,marker=markershape,linewidths=0,\
-                    cmap=colormap,norm=None,vmin=minv,alpha=alphaval)
+    plt.scatter(cols, rows, c=logvals, s=markersize, marker=markershape, 
+        linewidths=0, cmap=colormap, vmin=minv, alpha=alphaval, norm=None)
     plt.axis([0,n_grid,0,n_grid], 'equal')
     plt.xticks([])
     plt.yticks([])
     plt.axis('off')
-    plt.savefig(name, bbox_inches='tight', pad_inches=fig_dim/6)
+    plt.savefig(name, bbox_inches='tight', pad_inches=fig_dim/6, 
+        facecolor=facecolor)
     plt.close()
     return
 
