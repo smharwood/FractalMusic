@@ -52,7 +52,12 @@ def get_audio(duration_seconds, rate, test=False):
     return data
 
 
-def get_relative_strengths(targets, duration_seconds=2, rate=6000, test=False):
+def get_relative_strengths(
+        targets, 
+        duration_seconds=2, 
+        rate=6000,  
+        name=None, 
+        test=False):
     """ 
     Record audio and analyze to find relative strength of given frequencies
 
@@ -60,6 +65,7 @@ def get_relative_strengths(targets, duration_seconds=2, rate=6000, test=False):
     targets : (list of floats) The frequencies in Hertz to analyze
     duration_seconds : (float) Duration of recording (in seconds)
     rate : (int) Sample rate in Hertz (samples/second)
+    name : (string) Base of name to use if saving the spectrum figure
     test : (Boolean) Whether to show some plots of whats going on
 
     Returns:
@@ -81,15 +87,18 @@ def get_relative_strengths(targets, duration_seconds=2, rate=6000, test=False):
     resolution = float(rate)/len(data)
     target_indices = [int(t/resolution) for t in targets]
     strengths = fft_mod[target_indices]
-    if test:
+    if name is not None or test:
         print("Strengths: {}".format(strengths))
         x = resolution*np.arange(len(fft_mod))
-        plt.plot(x,fft_mod)
+        plt.plot(x,np.log(fft_mod))
         for t in targets:
             plt.axvline(x=t,color='k')
         plt.xlabel('Frequency, Hz')
-        plt.title('Spectrum')
-        plt.show()
+        plt.title('(log) Spectrum')
+        #plt.xlim(0.5*min(targets),2*max(targets))
+        plt.xlim(0,2*max(targets))
+        plt.savefig(name+'-spectrum')
+        plt.close()
     return strengths, data
 
 

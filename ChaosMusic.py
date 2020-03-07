@@ -31,10 +31,15 @@ def main(args):
     Get base parameters of the image generation,
     and optionally listen to sound to seed some other parameters
     """
-    # These are frequencies of the Bb overtone series from Bb1
-    targets = [58.270, 87.307, 116.54, 146.83, 174.61]
+    # Bb2 F3 Bb3 F4 Bb4
+    targets = [116.54, 174.61, 233.08, 349.23, 466.16]
+    # Bb2 Bb3 Bb4 F4 A4
+    #targets = [116.5409, 233.0819, 349.2282, 466.1638, 440.0]
+    # Frequencies of the Bb overtone series from Bb1:
+    #targets = [58.270, 87.307, 116.54, 146.83, 174.61]
     n_basis_pts = len(targets)
     verbose = True
+    n_slices=3
     if args:
         # Do NOT analyze sound - e.g. for testing
         ideal = True
@@ -57,7 +62,7 @@ def main(args):
         # Make these the raw weights of the basis points in the chaos game
         # The notes appearing more strongly will be chosen more often in the iteration
         strengths, data = SA.get_relative_strengths(targets, 
-            duration_seconds=4, rate=12000, test=False)
+            duration_seconds=4, rate=12000, name=name)
         raw_wts = strengths
         randoms = None
         filter_seq = False   
@@ -87,7 +92,7 @@ def main(args):
     # Plot
     if verbose: print("Creating fractal image")
     plotter(density,name,invert=False)
-    plotter_simple_invert(density,name+'-invert')
+    plotter_simple_invert(density,name+'-invert',n_slices=n_slices)
     return
 
 
@@ -98,7 +103,7 @@ def GetParameters(n_basis_pts=5,n_ideal_pts=5,verbose=True):
     assert n_basis_pts <= 5 and n_basis_pts > 0, "Number of basis points needs to be in (0,5]"
     assert n_ideal_pts <= n_basis_pts and n_ideal_pts > 0, "Number of ideal points not right"
 
-    timestring = '{}'.format(datetime.now()).split('.')[0].replace(' ','_')
+    timestring = datetime.now().isoformat('_','seconds')
     name ='fractal_{}'.format(timestring)
 
     # Set basis points
@@ -222,24 +227,53 @@ def GenerateImage(basis_pts, raw_wts, move_fracs,
     return density
 
 
-def plotter_simple_invert(density,name):
-    # Plot with imshow (simple and consistent)
+def plotter_simple_invert(density,name,n_slices=1):
+    """ Plot with imshow (simple and consistent) 
+        Also allow "slicing" image into layers 
+
+        See also plotter for some of the motivation
+    """
+    # map thru log
+    log_density = np.log(density + 1e-6)
+
     DPI = 100
     fig_dim = (2000.0)/DPI
-    log_density = np.log(density + 1e-6)
-    plt.figure(figsize=(fig_dim,fig_dim),dpi=DPI)
-    plt.imshow(log_density, cmap='Greys_r',origin='lower',interpolation='none')
-    plt.xticks([])
-    plt.yticks([])
-    plt.axis('off')
-    plt.savefig(name+'.png', bbox_inches='tight', pad_inches=fig_dim/6, 
-        facecolor='black')
-    plt.close()
+    nnz = np.count_nonzero(density)
+    n_grid = density.shape[0]
+    image_frac = nnz/float(n_grid**2)
+    inverse_scaling = max(0, 0.70 - image_frac)
+    vmax = np.max(log_density)
+    vmin = -inverse_scaling*vmax
+    background = vmin*np.ones(density.shape)
+
+    # Sort nonzeros, and figure out (n_slices)-iles of values
+    logvals = np.log(density[np.nonzero(density)].flatten()+1e-6)
+    logvals.sort()
+    slice_vals = [logvals[(i+1)*len(logvals)//n_slices-1] for i in range(n_slices)]
+    slice_vals.insert(0,0)
+
+    for i in range(n_slices):
+        condition = np.logical_and(log_density > slice_vals[i], 
+                                   log_density <=slice_vals[i+1])
+        slice_i = np.where(condition, log_density, background)
+        plt.figure(figsize=(fig_dim,fig_dim),dpi=DPI)
+        plt.imshow(slice_i, 
+            vmin=vmin,
+            vmax=vmax,
+            cmap='Greys_r',
+            origin='lower',
+            interpolation='none')
+        plt.xticks([])
+        plt.yticks([])
+        plt.axis('off')
+        plt.savefig(name+'-{}'.format(i), facecolor='black', 
+            bbox_inches='tight', pad_inches=fig_dim/6)
+        plt.close()
     return
 
 
 def plotter(density,name,invert=False):
-    # Plot in a more custom way
+    """ Plot in a more custom way """
 
     # assume square
     n_grid = density.shape[0]
@@ -259,17 +293,11 @@ def plotter(density,name,invert=False):
     # markershape : Shape of marker in scatterplot. 's' = square
     # markersize : Marker size in square points
     # alphaval : Alpha channel value for markers
-    # min_frac : controls minimum value for colormap of scatterplot
-    #   min_frac = 0 : full colormap spectrum is used
-    #   min_frac = 1 : half of colormap spectrum is used
     DPI = 100
     fig_dim = 2000.0/DPI
     markershape = 's'
     markersize = (3.1*72.0/DPI)**2 # 3.1 pixels wide?
     alphaval = 1.0
-    # idea here: if the scatterplot takes up a fair amount of the plot area,
-    # allow a finer color gradation
-    min_frac = max(0, 0.70 - len(vals)/float(n_grid**2))
     if invert:
         facecolor = 'black'
         colormap = 'Greys_r'
@@ -278,26 +306,45 @@ def plotter(density,name,invert=False):
         colormap = 'Greys'
 
     # Map density values thru log
-    # (log of density seems to produce more interesting image);
-    # set minimum value for setting colormap
-    logvals = np.log(vals)
-    minv = -min_frac*max(logvals)
-
+    # (log of density seems to produce more interesting image)
     # order the points so that higher values are plotted last and on top
+    logvals = np.log(vals)
     ordering = np.argsort(logvals)
     rows = rows[ordering]
     cols = cols[ordering]
     logvals = logvals[ordering]
 
+    # How much of the colormap's range do we want to use?
+    # Idea: if the scatterplot takes up a fair amount of the plot area,
+    # allow a finer color gradation (larger range).
+    # Take advantage of fact that minimum value of logvals is ~zero
+    # (log(min nonzero) = log(1) = 0)
+    image_frac = len(vals)/float(n_grid**2)
+    inverse_scaling = max(0, 0.70 - image_frac)
+    vmax = logvals[-1]
+    vmin = -inverse_scaling*vmax
+
+#    # min_frac : controls minimum value for colormap of scatterplot
+#    #   min_frac = 0 : full colormap spectrum is used
+#    #   min_frac = 1 : half of colormap spectrum is used
+#    min_frac = max(0, 0.70 - len(vals)/float(n_grid**2))
+#    minv = -min_frac*max(logvals)
+
     fig = plt.figure(figsize=(fig_dim,fig_dim), dpi=DPI)
-    plt.scatter(cols, rows, c=logvals, s=markersize, marker=markershape, 
-        linewidths=0, cmap=colormap, vmin=minv, alpha=alphaval, norm=None)
+    plt.scatter(cols, rows, c=logvals, 
+        s=markersize, 
+        marker=markershape, 
+        linewidths=0, 
+        cmap=colormap, 
+        vmin=vmin,
+        vmax=vmax, 
+        alpha=alphaval)
     plt.axis([0,n_grid,0,n_grid], 'equal')
     plt.xticks([])
     plt.yticks([])
     plt.axis('off')
-    plt.savefig(name, bbox_inches='tight', pad_inches=fig_dim/6, 
-        facecolor=facecolor)
+    plt.savefig(name, facecolor=facecolor,
+        bbox_inches='tight', pad_inches=fig_dim/6)
     plt.close()
     return
 
