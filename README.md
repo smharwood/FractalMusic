@@ -20,4 +20,4 @@ sudo apt-get install gfortran
 ```
 
 # Usage
-Run with `python ChaosMusic.py` to listen to ambient sound, analyze the frequencies, and seed the fractal generation with parameters determined from the sound somehow.
+Run with `python chaos_music.py` to listen to ambient sound, analyze the frequencies, and seed the fractal generation with parameters determined from the sound somehow.

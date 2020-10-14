@@ -6,11 +6,8 @@ Chaos Game inspired by music
 "v3": triggering from sound
 """
 import sys
-from datetime import datetime
 import numpy as np
-import scipy.stats as stats
 import matplotlib.pyplot as plt
-import sound_analyzer as SA
 try:
     import fractal_loop as floop
     USE_FORTRAN = True
@@ -18,7 +15,7 @@ except ImportError:
     USE_FORTRAN = False
 #    # OK, try building it
 #    import subprocess
-#    stat = subprocess.call("python -m numpy.f2py -c FractalLoop.f90 -m fractal_loop".split()) 
+#    stat = subprocess.call("python -m numpy.f2py -c fractal_loop.f90 -m fractal_loop".split()) 
 #    if stat:
 #        USE_FORTRAN = False
 #    else:
@@ -31,8 +28,15 @@ def main(args):
     Get base parameters of the image generation,
     and optionally listen to sound to seed some other parameters
     """
+    import scipy.stats as stats
+    import sound_analyzer as SA
+    from datetime import datetime
+
     # Bb2 F3 Bb3 F4 Bb4
     targets = [116.54, 174.61, 233.08, 349.23, 466.16]
+    # These continue the overtone series:
+    #     ~116.54*N:      10      11      12       20      30
+    redundancies = [1174.659, 1318.5, 1396.9, 2349.318, 3520.0]
     # Bb2 Bb3 Bb4 F4 A4
     #targets = [116.5409, 233.0819, 349.2282, 466.1638, 440.0]
     # Frequencies of the Bb overtone series from Bb1:
@@ -50,7 +54,9 @@ def main(args):
 
     # Get base parameters for image;
     # These might be overwritten
-    name, basis_pts, raw_wts, move_fracs = GetParameters(n_basis_pts,n_ideal_pts,verbose)
+    timestring = datetime.now().isoformat('_','seconds')
+    name ='fractal_{}'.format(timestring)
+    basis_pts, raw_wts, move_fracs = GetParameters(n_basis_pts, n_ideal_pts, verbose)
     
     if ideal:
         randoms = None
@@ -61,7 +67,7 @@ def main(args):
         # Look at strength/power of certain frequencies;
         # Make these the raw weights of the basis points in the chaos game
         # The notes appearing more strongly will be chosen more often in the iteration
-        strengths, data = SA.get_relative_strengths(targets, 
+        strengths, data = SA.get_relative_strengths(targets, redundancies,
             duration_seconds=4, rate=12000, name=name)
         raw_wts = strengths
         randoms = None
@@ -91,60 +97,62 @@ def main(args):
 
     # Plot
     if verbose: print("Creating fractal image")
-    plotter(density,name,invert=False)
-    plotter_simple_invert(density,name+'-invert',n_slices=n_slices)
+    plotter(density, name, invert=True)
+    plotter_simple_invert(density, name+'-invert', n_slices=n_slices)
     return
 
 
-def GetParameters(n_basis_pts=5,n_ideal_pts=5,verbose=True):
+def GetParameters(n_basis_pts=5, n_ideal_pts=None, verbose=True):
     """ 
     Get parameters for chaos game
     """
-    assert n_basis_pts <= 5 and n_basis_pts > 0, "Number of basis points needs to be in (0,5]"
+    if n_ideal_pts is None : n_ideal_pts = n_basis_pts
+    assert n_basis_pts <= 6 and n_basis_pts > 0, "Number of basis points needs to be in (0,6]"
     assert n_ideal_pts <= n_basis_pts and n_ideal_pts > 0, "Number of ideal points not right"
-
-    timestring = datetime.now().isoformat('_','seconds')
-    name ='fractal_{}'.format(timestring)
 
     # Set basis points
     basis_pts = []
-    # Put points uniformly around unit circle
-    for k in range(n_ideal_pts):
-        angle = k*2*np.pi/n_ideal_pts
-        basis_pts.append([0.5*np.cos(angle), 0.5*np.sin(angle)])
-    # Put the rest randomly in unit circle
-    for k in range(n_basis_pts - n_ideal_pts):
-        #r = 0.5*np.random.random()
-        r = 0.5*(k+1)/float(n_basis_pts - n_ideal_pts)
-        angle = 2*np.pi*np.random.random()
+    for k in range(n_basis_pts):
+        angle = k*2*np.pi/n_basis_pts
+        r = 0.25 + 0.25*np.random.random()
         basis_pts.append([r*np.cos(angle), r*np.sin(angle)])
+#    # Put points uniformly around unit circle
+#    for k in range(n_ideal_pts):
+#        angle = k*2*np.pi/n_ideal_pts
+#        basis_pts.append([0.5*np.cos(angle), 0.5*np.sin(angle)])
+#    # Put the rest randomly in unit circle
+#    for k in range(n_basis_pts - n_ideal_pts):
+#        r = 0.5*(k+1)/float(n_basis_pts - n_ideal_pts)
+#        angle = 2*np.pi*np.random.random()
+#        basis_pts.append([r*np.cos(angle), r*np.sin(angle)])
     # shift the center to (0.5, 0.5)
     basis_pts = np.array([0.5, 0.5]) + basis_pts
-
-    # Set weighting for each basis point in chaos game
-    # These relative weights/frequencies could reflect the relative weight of some
-    # component of the music or sound that is analyzed
-    # FOR NOW - they just get overwritten
-    beats = [2,3,5,7,11]
-    raw_wts = np.array([1.0/b for b in beats[:n_basis_pts]])
 
     # Move fractions
     # TODO: What could move fraction be?
     # Maybe this provides some dynamics-
     # all the beats speed up in proportion somehow
     # kind of like how a higher move fraction bunches points up near a certain basis point
-    move_fracs = 0.5*np.ones(n_basis_pts)
+#    move_fracs = 0.5*np.ones(n_basis_pts)
+    move_fracs = 0.25 + 0.5*np.random.rand(n_basis_pts)
+
+    # Set weighting for each basis point in chaos game
+    # These relative weights/frequencies could reflect the relative weight of some
+    # component of the music or sound that is analyzed
+    # FOR NOW - they just get overwritten
+    beats = [2,3,5,7,11,13]
+    ideal_wts = np.array([1.0/b for b in beats[:n_basis_pts]])
 
     if verbose:
         print("Basis points:\n{}".format(basis_pts))
-        print("(ideal) raw weights: {}".format(raw_wts))
-        print("(ideal) move fractions: {}".format(move_fracs))
+        print("Move fractions: {}".format(move_fracs))
+        print("(ideal) raw weights: {}".format(ideal_wts))
 
-    return  name, basis_pts, raw_wts, move_fracs 
+    return basis_pts, ideal_wts, move_fracs 
 
 
 def GenerateImage(basis_pts, raw_wts, move_fracs, 
-        n_Iterations=5e5, n_grid=1000, randoms=None, filter_seq=True, 
+        n_Iterations=5e5, n_grid=1000, randoms=None, filter_seq=False, 
         use_fortran=True, verbose=True):
     """
     Play the "Chaos Game" to generate an image (png) file
@@ -164,7 +172,7 @@ def GenerateImage(basis_pts, raw_wts, move_fracs,
     
     n_Iterations = int(n_Iterations)
     # Calculate cumulative probability distribution based on raw weights
-    prob = raw_wts/np.sum(raw_wts)
+    prob = np.asarray(raw_wts)/np.sum(raw_wts)
     cumulProb = np.array([ np.sum(prob[0:i+1]) for i in range(len(prob)) ])
 
     if verbose:
@@ -227,23 +235,20 @@ def GenerateImage(basis_pts, raw_wts, move_fracs,
     return density
 
 
-def plotter_simple_invert(density,name,n_slices=1):
-    """ Plot with imshow (simple and consistent) 
-        Also allow "slicing" image into layers 
+def plotter_simple_invert(density, name, n_slices=1):
+    """ 
+    Plot with imshow (simple and consistent) 
+    Also allow "slicing" image into layers 
 
-        See also plotter for some of the motivation
+    See also plotter for some of the motivation
     """
     # map thru log
     log_density = np.log(density + 1e-6)
 
     DPI = 100
     fig_dim = (2000.0)/DPI
-    nnz = np.count_nonzero(density)
-    n_grid = density.shape[0]
-    image_frac = nnz/float(n_grid**2)
-    inverse_scaling = max(0, 0.70 - image_frac)
     vmax = np.max(log_density)
-    vmin = -inverse_scaling*vmax
+    vmin = -0.5*vmax
     background = vmin*np.ones(density.shape)
 
     # Sort nonzeros, and figure out (n_slices)-iles of values
@@ -272,7 +277,7 @@ def plotter_simple_invert(density,name,n_slices=1):
     return
 
 
-def plotter(density,name,invert=False):
+def plotter(density, name, invert=False):
     """ Plot in a more custom way """
 
     # assume square
@@ -314,21 +319,13 @@ def plotter(density,name,invert=False):
     cols = cols[ordering]
     logvals = logvals[ordering]
 
-    # How much of the colormap's range do we want to use?
-    # Idea: if the scatterplot takes up a fair amount of the plot area,
-    # allow a finer color gradation (larger range).
+    # Use only about 2/3 of the colormap's range
     # Take advantage of fact that minimum value of logvals is ~zero
     # (log(min nonzero) = log(1) = 0)
-    image_frac = len(vals)/float(n_grid**2)
-    inverse_scaling = max(0, 0.70 - image_frac)
+#    image_frac = len(vals)/float(n_grid**2)
+#    inverse_scaling = max(0, 0.70 - image_frac)
     vmax = logvals[-1]
-    vmin = -inverse_scaling*vmax
-
-#    # min_frac : controls minimum value for colormap of scatterplot
-#    #   min_frac = 0 : full colormap spectrum is used
-#    #   min_frac = 1 : half of colormap spectrum is used
-#    min_frac = max(0, 0.70 - len(vals)/float(n_grid**2))
-#    minv = -min_frac*max(logvals)
+    vmin = -0.5*vmax
 
     fig = plt.figure(figsize=(fig_dim,fig_dim), dpi=DPI)
     plt.scatter(cols, rows, c=logvals, 
@@ -339,10 +336,11 @@ def plotter(density,name,invert=False):
         vmin=vmin,
         vmax=vmax, 
         alpha=alphaval)
-    plt.axis([0,n_grid,0,n_grid], 'equal')
+    plt.axis([0,n_grid,0,n_grid])
+    plt.axis('equal')
+    plt.axis('off')
     plt.xticks([])
     plt.yticks([])
-    plt.axis('off')
     plt.savefig(name, facecolor=facecolor,
         bbox_inches='tight', pad_inches=fig_dim/6)
     plt.close()

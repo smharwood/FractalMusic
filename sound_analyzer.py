@@ -54,6 +54,7 @@ def get_audio(duration_seconds, rate, test=False):
 
 def get_relative_strengths(
         targets, 
+        redundancies=[],
         duration_seconds=2, 
         rate=6000,  
         name=None, 
@@ -86,17 +87,22 @@ def get_relative_strengths(
     # is essentially the inverse of how long we record
     resolution = float(rate)/len(data)
     target_indices = [int(t/resolution) for t in targets]
+    redund_indices = [int(t/resolution) for t in redundancies]
     strengths = fft_mod[target_indices]
+    strengths_red = fft_mod[redund_indices]
     if name is not None or test:
         print("Strengths: {}".format(strengths))
+        print("Strengths (redundant): {}".format(strengths_red))
         x = resolution*np.arange(len(fft_mod))
+        plt.figure(figsize=(12,8))
         plt.plot(x,np.log(fft_mod))
         for t in targets:
             plt.axvline(x=t,color='k')
+        for r in redundancies:
+            plt.axvline(x=r,color='r')  
         plt.xlabel('Frequency, Hz')
         plt.title('(log) Spectrum')
-        #plt.xlim(0.5*min(targets),2*max(targets))
-        plt.xlim(0,2*max(targets))
+        plt.xlim(0,max(targets+redundancies)+min(targets+redundancies))
         plt.savefig(name+'-spectrum')
         plt.close()
     return strengths, data
