@@ -44,19 +44,15 @@ def main(args):
     n_basis_pts = len(targets)
     verbose = True
     n_slices=3
-    if args:
-        # Do NOT analyze sound - e.g. for testing
-        ideal = True
-        n_ideal_pts = n_basis_pts
-    else:
-        ideal = False
-        n_ideal_pts = 3
+    # For testing, do NOT analyze sound (more reproducible)
+    if args: ideal = True
+    else:    ideal = False
 
     # Get base parameters for image;
     # These might be overwritten
     timestring = datetime.now().isoformat('_','seconds')
     name ='fractal_{}'.format(timestring)
-    basis_pts, raw_wts, move_fracs = GetParameters(n_basis_pts, n_ideal_pts, verbose)
+    basis_pts, raw_wts, mfs = GetParameters(n_basis_pts, verbose=verbose)
     
     if ideal:
         randoms = None
@@ -68,7 +64,8 @@ def main(args):
         # Make these the raw weights of the basis points in the chaos game
         # The notes appearing more strongly will be chosen more often in the iteration
         strengths, data = SA.get_relative_strengths(targets, redundancies,
-            duration_seconds=4, rate=12000, name=name)
+            duration_seconds=0.1, rate=44100, name=name)
+#            duration_seconds=4, rate=12000, name=name)
         raw_wts = strengths
         randoms = None
         filter_seq = False   
@@ -92,7 +89,7 @@ def main(args):
         """
 
     # Generate fractal data
-    density = GenerateImage(basis_pts, raw_wts, move_fracs, randoms=randoms, 
+    density = GenerateImage(basis_pts, raw_wts, mfs, randoms=randoms, 
             filter_seq=filter_seq, use_fortran=USE_FORTRAN, verbose=verbose)
 
     # Plot
@@ -102,53 +99,70 @@ def main(args):
     return
 
 
-def GetParameters(n_basis_pts=5, n_ideal_pts=None, verbose=True):
+def GetParameters(n_basis_pts=5, wts=None, mfs=None, twist=None, verbose=True):
     """ 
     Get parameters for chaos game
     """
-    if n_ideal_pts is None : n_ideal_pts = n_basis_pts
     assert n_basis_pts <= 6 and n_basis_pts > 0, "Number of basis points needs to be in (0,6]"
-    assert n_ideal_pts <= n_basis_pts and n_ideal_pts > 0, "Number of ideal points not right"
+
+    # Random twist (up to 60 degrees)
+    if twist is None:
+        twist = np.pi*np.random.rand()/3
+
+    # Take number of basis points from weights or move fractions
+    if wts is not None and mfs is not None:
+        n_basis_pts = min(len(wts), len(mfs))
+    elif wts is not None:
+        n_basis_pts = len(wts)
+    elif mfs is not None:
+        n_basis_pts = len(mfs)
 
     # Set basis points
     basis_pts = []
     for k in range(n_basis_pts):
-        angle = k*2*np.pi/n_basis_pts
+        angle = twist + k*2*np.pi/n_basis_pts
         r = 0.25 + 0.25*np.random.random()
         basis_pts.append([r*np.cos(angle), r*np.sin(angle)])
-#    # Put points uniformly around unit circle
-#    for k in range(n_ideal_pts):
-#        angle = k*2*np.pi/n_ideal_pts
-#        basis_pts.append([0.5*np.cos(angle), 0.5*np.sin(angle)])
-#    # Put the rest randomly in unit circle
-#    for k in range(n_basis_pts - n_ideal_pts):
-#        r = 0.5*(k+1)/float(n_basis_pts - n_ideal_pts)
-#        angle = 2*np.pi*np.random.random()
-#        basis_pts.append([r*np.cos(angle), r*np.sin(angle)])
     # shift the center to (0.5, 0.5)
     basis_pts = np.array([0.5, 0.5]) + basis_pts
 
-    # Move fractions
-    # TODO: What could move fraction be?
-    # Maybe this provides some dynamics-
-    # all the beats speed up in proportion somehow
-    # kind of like how a higher move fraction bunches points up near a certain basis point
-#    move_fracs = 0.5*np.ones(n_basis_pts)
-    move_fracs = 0.25 + 0.5*np.random.rand(n_basis_pts)
+    # Ideal (?) interpretations:
+    # Move fractions:
+    #   These parameters make me think of the instantaneous,
+    #   or maybe overall/integrated, prevalence of a point.
+    #   This could correspond to the time-independent
+    #   (that is, frequency-domain) prevalence or strength of a musical element
+    # Basis point weights:
+    #   Thinking about the iteration that happens in the chaos game, the
+    #   weights seem to reflect a dynamic or temporal prevalence of the point.
+    #
+    # Practical note:
+    # Move fractions need to be somewhat comparable in size
+    # Weights can differ more
 
-    # Set weighting for each basis point in chaos game
-    # These relative weights/frequencies could reflect the relative weight of some
-    # component of the music or sound that is analyzed
-    # FOR NOW - they just get overwritten
-    beats = [2,3,5,7,11,13]
-    ideal_wts = np.array([1.0/b for b in beats[:n_basis_pts]])
+    # move fractions
+    # use random if None, otherwise scale values to [0,1] (or so)
+    if mfs is None:
+        #mfs = 0.6*np.ones(n_basis_pts)
+        mfs = 0.25 + 0.5*np.random.rand(n_basis_pts)
+    else:
+        mfs = np.asarray(mfs[:n_basis_pts])
+        mfs = 0.5 + 0.5*(mfs - np.mean(mfs))/(np.max(mfs) - np.min(mfs) + 1e-6)
+    
+    # weights
+    # use random if None, otherwise just cast as numpy array
+    if wts is None:
+        #wts = np.ones(n_basis_pts)
+        wts = np.random.rand(n_basis_pts)
+    else:
+        wts = np.asarray(wts[:n_basis_pts])
 
     if verbose:
         print("Basis points:\n{}".format(basis_pts))
-        print("Move fractions: {}".format(move_fracs))
-        print("(ideal) raw weights: {}".format(ideal_wts))
+        print("(default) move fractions: {}".format(mfs))
+        print("(default) raw weights: {}".format(wts))
 
-    return basis_pts, ideal_wts, move_fracs 
+    return basis_pts, wts, mfs
 
 
 def GenerateImage(basis_pts, raw_wts, move_fracs, 
@@ -177,6 +191,7 @@ def GenerateImage(basis_pts, raw_wts, move_fracs,
 
     if verbose:
         print("\nProbabilities (relative frequencies): {}".format(prob))
+        print("Move fractions (relative strengths): {}".format(move_fracs))
         print("Using ideal randoms: {}".format((randoms is None)))
         print("Filtering sequence of points: {}".format(filter_seq))
         print("Number iterations: {}".format(n_Iterations if randoms is None else len(randoms)))

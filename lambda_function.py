@@ -3,6 +3,7 @@ AWS Lambda function
 """
 import os, json
 import base64
+import numpy as np
 from chaos_music import GetParameters, GenerateImage, plotter, USE_FORTRAN
 
 def lambda_handler(event, context):
@@ -26,36 +27,40 @@ def lambda_handler(event, context):
     # TODO: make use of Matplotlib kosher (see logs)
 
     name = 'fractal'
-    iterations = 1e5
-    max_iterations = 5e4
-    params = event['queryStringParameters']
+    iterations = 5e4
     # Set max iterations higher if not a test
     try:
         req_con = event['requestContext']
         if req_con['stage'] == 'pub':
-            max_iterations = 5e5
+            iterations = 5e5
     except Exception: pass
-    try:
-        iterations = int(params['iterations'])
-    except Exception: pass
-    iterations = min(iterations, max_iterations)
-    beats = [2,3,5,7,11,13]
-    input_wts = []
+    params = event['queryStringParameters']
+    # Weight parameters
+    wts = []
     for i in range(6):
         try:
-            input_wts.append(float(params['w{}'.format(i+1)]))
-        except Exception:
-            if i > 2 : break
-            input_wts.append(1.0/beats[i])
+            wts.append(float(params['w{}'.format(i)]))
+        except Exception: pass
+    # use default
+    if len(wts) < 3: wts = None
+    # Move parameters
+    mfs = []
+    for i in range(6):
+        try:
+            mfs.append(float(params['m{}'.format(i)]))
+        except Exception: pass
+    # use default
+    if len(mfs) < 3: mfs = None
 
     print(event)
     print("Using Fortran: {}".format(USE_FORTRAN))
-    print("Raw weights: {}".format(input_wts))
+    print("Weights: {}".format(wts))
+    print("Moves: {}".format(mfs))
 
     # Generate fractal
     # note that scratch space is at /tmp
     image_name = "/tmp/{}.png".format(name)
-    generate_fractal(image_name, input_wts, iterations)
+    generate_fractal(image_name, iterations, wts, mfs)
     with open(image_name, 'rb') as image:
         byte_string = base64.b64encode(image.read())
         return {
@@ -63,7 +68,6 @@ def lambda_handler(event, context):
                          "Access-Control-Allow-Origin": "*" },
             'statusCode': 200,
             'body': byte_string.decode('utf-8'),
-#            'body': byte_string,
             'isBase64Encoded': True
         }
     # else
@@ -75,10 +79,9 @@ def lambda_handler(event, context):
     }
 
 
-def generate_fractal(image_name, input_wts, n_iterations):  
-    n_pts = len(input_wts)
-    basis_pts, _, move_fracs = GetParameters(n_pts)
-    density = GenerateImage(basis_pts, input_wts, move_fracs,
+def generate_fractal(image_name, n_iterations, wts=None, mfs=None):
+    basis_pts, wts, mfs = GetParameters(wts=wts, mfs=mfs)
+    density = GenerateImage(basis_pts, wts, mfs,
             n_Iterations=n_iterations, use_fortran=USE_FORTRAN)
     plotter(density, image_name, invert=True)
     return
