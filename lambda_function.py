@@ -64,18 +64,19 @@ def lambda_handler(event, context):
     with open(image_name, 'rb') as image:
         byte_string = base64.b64encode(image.read())
         return {
-            'headers': { "Content-Type": "image/png",
-                         "Access-Control-Allow-Origin": "*" },
+            'headers': { "Content-Type": 'image/png',
+                         "Access-Control-Allow-Origin": '*',
+                         "Access-Control-Allow-Headers": 'Content-Type, X-Api-Key' },
             'statusCode': 200,
             'body': byte_string.decode('utf-8'),
             'isBase64Encoded': True
         }
     # else
     return {
-        'headers': { "Content-type": "text/html",
-                     "Access-Control-Allow-Origin": "*" },
+        'headers': { "Content-Type": 'text/html',
+                     "Access-Control-Allow-Origin": '*' },
         'statusCode': 200,
-        'body': "<h1>I guess this did not work</h1>",
+        'body': '<h1>I guess this did not work</h1>',
     }
 
 
