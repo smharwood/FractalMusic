@@ -1,9 +1,7 @@
 """
 AWS Lambda function
 """
-import os, json
 import base64
-import numpy as np
 from chaos_music import GetParameters, GenerateImage, plotter, USE_FORTRAN
 
 def lambda_handler(event, context):
