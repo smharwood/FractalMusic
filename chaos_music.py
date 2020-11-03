@@ -99,11 +99,19 @@ def main(args):
     return
 
 
-def GetParameters(n_basis_pts=5, wts=None, mfs=None, twist=None, verbose=True):
+def GetParameters(
+        n_basis_pts=5,
+        wts=None,
+        mfs=None,
+        twist=None,
+        seed=None,
+        verbose=True):
     """ 
     Get parameters for chaos game
     """
-    assert n_basis_pts <= 6 and n_basis_pts > 0, "Number of basis points needs to be in (0,6]"
+    # Set random seed if desired
+    if seed is not None:
+        np.random.seed(seed)
 
     # Random twist (up to 60 degrees)
     if twist is None:

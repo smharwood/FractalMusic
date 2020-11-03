@@ -79,7 +79,7 @@ def lambda_handler(event, context):
 
 
 def generate_fractal(image_name, n_iterations, wts=None, mfs=None):
-    basis_pts, wts, mfs = GetParameters(wts=wts, mfs=mfs)
+    basis_pts, wts, mfs = GetParameters(wts=wts, mfs=mfs, twist=0, seed=0)
     density = GenerateImage(basis_pts, wts, mfs,
             n_Iterations=n_iterations, use_fortran=USE_FORTRAN)
     plotter(density, image_name, invert=True)
