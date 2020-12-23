@@ -2,7 +2,7 @@
 AWS Lambda function
 """
 import base64
-from chaos_music import GetParameters, GenerateImage, plotter, USE_FORTRAN
+from chaos_music import GetParameters, GenerateImage, plotter
 
 def lambda_handler(event, context):
     """
@@ -51,7 +51,6 @@ def lambda_handler(event, context):
     if len(mfs) < 3: mfs = None
 
     print(event)
-    print("Using Fortran: {}".format(USE_FORTRAN))
     print("Weights: {}".format(wts))
     print("Moves: {}".format(mfs))
 
@@ -80,7 +79,6 @@ def lambda_handler(event, context):
 
 def generate_fractal(image_name, n_iterations, wts=None, mfs=None):
     basis_pts, wts, mfs = GetParameters(wts=wts, mfs=mfs, twist=0, seed=0)
-    density = GenerateImage(basis_pts, wts, mfs,
-            n_Iterations=n_iterations, use_fortran=USE_FORTRAN)
+    density = GenerateImage(basis_pts, wts, mfs, n_Iterations=n_iterations)
     plotter(density, image_name, invert=True)
     return

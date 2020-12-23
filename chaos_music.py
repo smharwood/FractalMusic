@@ -10,17 +10,18 @@ import numpy as np
 import matplotlib.pyplot as plt
 try:
     import fractal_loop as floop
-    USE_FORTRAN = True
+    _USABLE_FORTRAN = True
 except ImportError:
-    USE_FORTRAN = False
+    _USABLE_FORTRAN = False
 #    # OK, try building it
 #    import subprocess
 #    stat = subprocess.call("python -m numpy.f2py -c fractal_loop.f90 -m fractal_loop".split()) 
 #    if stat:
-#        USE_FORTRAN = False
+#        _USABLE_FORTRAN = False
 #    else:
 #        import fractal_loop as floop
-#        USE_FORTRAN = True
+#        _USABLE_FORTRAN = True
+print("Usable Fortran: {}".format(_USABLE_FORTRAN))
 
 
 def main(args):
@@ -90,7 +91,7 @@ def main(args):
 
     # Generate fractal data
     density = GenerateImage(basis_pts, raw_wts, mfs, randoms=randoms, 
-            filter_seq=filter_seq, use_fortran=USE_FORTRAN, verbose=verbose)
+            filter_seq=filter_seq, verbose=verbose)
 
     # Plot
     if verbose: print("Creating fractal image")
@@ -187,7 +188,7 @@ def GenerateImage(basis_pts, raw_wts, move_fracs,
     n_grid : (int) How many grid point to plot (roughly, the resolution)
     randoms : (array) Optional pre-computed random numbers to use for chaos game iteration
     filter_seq : (boolean) Filter sequence of basis points ... somehow 
-    use_fortran : (boolean) Use fractal_loop module with fast compiled code
+    use_fortran : (boolean) Use fractal_loop module with fast compiled code (if possible)
     verbose : (boolean) Display what's going on
     """
     # should probably check that basis_pts are in unit square
@@ -226,7 +227,7 @@ def GenerateImage(basis_pts, raw_wts, move_fracs,
     else:
         basis_sequence = basis_sequence_full
 
-    if use_fortran:
+    if use_fortran and _USABLE_FORTRAN:
         # Call compiled Fortran to do loop real fast
         density = floop.get_density(n_grid, basis_sequence, move_fracs, basis_pts)
     else:
