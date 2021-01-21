@@ -96,7 +96,7 @@ def main(args):
     # Plot
     if verbose: print("Creating fractal image")
     plotter(density, name, invert=True)
-    plotter_simple_invert(density, name+'-invert', n_slices=n_slices)
+    #plotter_simple_invert(density, name+'-invert', n_slices=n_slices)
     return
 
 
@@ -328,10 +328,11 @@ def plotter(density, name, invert=False):
     markersize = (3.1*72.0/DPI)**2 # 3.1 pixels wide?
     alphaval = 1.0
     if invert:
-        facecolor = 'black'
+        transparent = True
         colormap = 'Greys_r'
     else:
-        facecolor = 'white'
+        transparent = False
+        #facecolor = 'white'
         colormap = 'Greys'
 
     # Map density values thru log
@@ -365,7 +366,7 @@ def plotter(density, name, invert=False):
     plt.axis('off')
     plt.xticks([])
     plt.yticks([])
-    plt.savefig(name, facecolor=facecolor,
+    plt.savefig(name, transparent=transparent,
         bbox_inches='tight', pad_inches=fig_dim/6)
     plt.close()
     return
