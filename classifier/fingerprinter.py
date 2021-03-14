@@ -375,83 +375,20 @@ def test_features(fname='test.mp3'):
     print("Decibel range: {}".format(10*(np.max(spec)-np.min(spec))))
     return
 
-def rename_audio(path='audio'):
-    """ Rename audio files to '<class>N.mp3' """
-    # Assuming the audio files have the class name in the file name
-    # A bit of a hack so that my shell call to ffmpeg can convert them to WAV
-    classes = _ALL_CLASSES
-    counts = dict()
-    for c in classes:
-        counts[c] = 0
-    pattern = '({}).*(\.mp3)'.format('|'.join(classes))
-    reg = re.compile(pattern, re.IGNORECASE)
-    for f in os.listdir(path):
-        m = reg.search(f)
-        if not m: continue
-        c = m.groups()[0].lower()
-        counts[c] += 1
-        os.rename(os.path.join(path, f), 
-                  os.path.join(path, '{}{}.mp3'.format(c,counts[c])) )
-    return
-
-def determine_max_silence(path, max_length=60, min_length=1.0, silence_th=10.0):
-    """ How long is silence in any of these initial clips? """
-    """
-    Representative results:
-    Start: 37.86, Length: 1.25
-    Start: 34.11, Length: 1.37
-    Start: 31.15, Length: 1.59
-    Start: 30.59, Length: 1.25
-    ...
-    Start: 14.80, Length: 3.41
-    """
-    # Find the mp3 files (filename contains the class name)
-    # and get data
-    classes = _ALL_CLASSES
-    pattern = '({}).*(\.mp3)'.format('|'.join(classes))
-    reg = re.compile(pattern, re.IGNORECASE)
-    silences_start = []
-    silences_length = []
-    for f in os.listdir(path):
-        m = reg.search(f)
-        if not m: continue
-        c = m.groups()[0].lower()
-        data, rate = get_audio(os.path.join(path,f), max_length)
-        # where and how long are the silences?
-        is_silent = False
-        for i, d in enumerate(data):
-            if np.fabs(d) <= silence_th:
-                if not is_silent:
-                    silence_start_index = i
-                is_silent = True
-            else:
-                if is_silent:
-                    length_samples = i - silence_start_index
-                    if length_samples > min_length * rate:
-                        silences_start.append(silence_start_index / rate)
-                        silences_length.append(length_samples / rate)
-                is_silent = False
-    arg_sorting = np.argsort(silences_start)
-    for i in np.flip(arg_sorting):
-        print("Start: {:.2f}, Length: {:.2f}".format(silences_start[i], silences_length[i]))
-    return              
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Script to train and test music classifier")
     parser.add_argument('-t', '--train', action='store_true',
         help="Train classifier, using audio in PATH")
-    parser.add_argument('-p', '--path', type=str, default='audio',
-        help="Path to folder of audio clips")
     parser.add_argument('-s', '--test', action='store_true',
         help="Test trained and saved classifier")
     parser.add_argument('-v', '--vis', action='store_true',
         help="Visualize feature creation")
+    parser.add_argument('-p', '--path', type=str, default='audio',
+        help="Path to folder of audio clips")
     parser.add_argument('-f', '--file', type=str, default='test.mp3',
         help="Audio file to visualize")
-    parser.add_argument('-r', '--rename', action='store_true',
-        help="Rename audio in PATH")
     args = parser.parse_args()
 
     noaction = True
@@ -463,9 +400,6 @@ if __name__ == "__main__":
         noaction = False
     if args.vis:
         test_features(args.file)
-        noaction = False
-    if args.rename:
-        rename_audio(args.path)
         noaction = False
     if noaction:
         parser.print_help()
