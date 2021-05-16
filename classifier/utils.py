@@ -7,7 +7,7 @@ In particular, Frankenstein a good classifier out of pieces
 """
 import argparse, os, re
 import numpy as np
-from fingerprinter import _ALL_CLASSES, get_audio
+from classifier import _ALL_CLASSES, get_audio
 
 def rename_audio(path='audio'):
     """ Rename audio files to '<class>N.mp3' """
