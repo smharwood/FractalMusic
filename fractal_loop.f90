@@ -1,6 +1,6 @@
 ! -*- f90 -*-
 ! Compile with
-! python -m numpy.f2py -c FractalLoop.f90 -m fractal_loop
+! python -m numpy.f2py -c fractal_loop.f90 -m fractal_loop
 
 subroutine get_density(n_iter, n_basis, n_grid, randomIndices, moveFrac, basisPoints, density)
 ! =====================================================
